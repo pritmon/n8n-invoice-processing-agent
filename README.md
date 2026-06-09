@@ -23,6 +23,16 @@ Gmail Inbox  →  PDF Extract  →  AI Parse  →  Business Rules  →  Email Re
 
 ---
 
+## Features
+
+- **Zero-touch inbox monitoring** — Gmail trigger polls every 60 seconds, skips emails with no attachment
+- **AI field extraction** — GPT-4o-mini reads raw PDF text and returns structured JSON (vendor, amount, tax, GSTIN, due date, invoice number)
+- **5-rule validation engine** — amount threshold, missing fields, overdue date — all checked automatically
+- **Dual routing** — flags for human review or auto-approves and logs, no manual sorting needed
+- **Audit log** — every invoice decision is recorded for traceability
+
+---
+
 ## Workflow — n8n Canvas
 
 <div align="center">
@@ -30,6 +40,54 @@ Gmail Inbox  →  PDF Extract  →  AI Parse  →  Business Rules  →  Email Re
 <br/>
 <sub>Live n8n workflow: Gmail trigger → PDF extract → AI agent → business rules → routed email response</sub>
 </div>
+
+---
+
+## How It Works
+
+```mermaid
+flowchart TD
+    A([📧 Gmail Trigger\npolls every 60s]) --> B{Has Attachment?}
+    B -- No --> Z([Skip])
+    B -- Yes --> C[📄 Extract PDF Text]
+    C --> D[🤖 AI Agent\nGPT-4o-mini]
+    D --> E[🔍 Parse Output\nstructured JSON]
+    E --> F[✅ Validate Rules\n5 business checks]
+    F --> G{Any Anomaly?}
+    G -- Yes --> H([🔴 Flag for Review\nREVIEW REQUIRED email])
+    G -- No --> I([🟢 Auto Approve\nAUTO APPROVED email])
+    H --> J[(📋 Log Invoice)]
+    I --> J
+```
+
+### Node-by-node
+
+| Step | Node | What happens |
+|------|------|-------------|
+| 1 | **Gmail Trigger** | Polls inbox every 60 s, fires on new emails |
+| 2 | **Has attachment?** | Routes away emails with no PDF attached |
+| 3 | **Extract PDF text** | Reads binary attachment, outputs raw text |
+| 4 | **AI Agent** | Sends PDF text to GPT-4o-mini with extraction prompt |
+| 5 | **OpenAI Chat Model** | GPT-4o-mini processes and returns structured data |
+| 6 | **Parse Output** | Converts AI response to usable JSON fields |
+| 7 | **Validate Rules** | Runs all 5 business-rule checks |
+| 8 | **Any anomaly?** | Branches on pass/fail |
+| 9a | **Flag for review** | Sends REVIEW REQUIRED email with reason |
+| 9b | **Auto approve** | Sends AUTO APPROVED confirmation email |
+| 10 | **Log invoice** | Records decision for audit trail |
+
+---
+
+## Business Rules
+
+| # | Rule | Result |
+|---|------|--------|
+| 1 | Amount > INR 50,000 | 🔴 Review Required |
+| 2 | Missing tax amount | 🔴 Review Required |
+| 3 | Missing invoice number | 🔴 Review Required |
+| 4 | Missing vendor GSTIN | 🔴 Review Required |
+| 5 | Invoice is overdue | 🔴 Review Required |
+| ✓ | All rules pass | 🟢 Auto Approved |
 
 ---
 
@@ -70,19 +128,6 @@ Triggered when all 5 business rules pass cleanly
 
 ---
 
-## Business Rules
-
-| # | Rule | Result |
-|---|------|--------|
-| 1 | Amount > INR 50,000 | 🔴 Review Required |
-| 2 | Missing tax amount | 🔴 Review Required |
-| 3 | Missing invoice number | 🔴 Review Required |
-| 4 | Missing vendor GSTIN | 🔴 Review Required |
-| 5 | Invoice is overdue | 🔴 Review Required |
-| ✓ | All rules pass | 🟢 Auto Approved |
-
----
-
 ## Stack
 
 | Layer | Tool |
@@ -91,6 +136,21 @@ Triggered when all 5 business rules pass cleanly
 | AI extraction | GPT-4o-mini via OpenAI API |
 | LLM orchestration | LangChain (n8n AI Agent node) |
 | Email trigger + send | Gmail OAuth API |
+
+---
+
+## Repo Structure
+
+```
+n8n-invoice-processing-agent/
+├── invoice-workflow.json   # importable n8n workflow — all nodes & config
+├── test-invoice.pdf        # sample invoice (INR 75,520 · triggers REVIEW)
+├── assets/
+│   ├── invoice-sample.png         # screenshot of the test PDF
+│   ├── gmail-review-required.png  # example REVIEW REQUIRED email
+│   └── gmail-auto-approved.png    # example AUTO APPROVED email
+└── README.md
+```
 
 ---
 
@@ -111,10 +171,8 @@ The Gmail trigger polls every 60 seconds.
 
 | Test case | How to trigger |
 |-----------|---------------|
-| 🔴 REVIEW REQUIRED | Attach an invoice with total > INR 50,000 |
+| 🔴 REVIEW REQUIRED | Attach `test-invoice.pdf` (total INR 75,520 — over threshold) |
 | 🟢 AUTO APPROVED | Attach an invoice with total < INR 50,000 and all fields present |
-
-The sample invoice in this repo (`test-invoice.pdf`) triggers **REVIEW REQUIRED** — total is INR 75,520.
 
 ---
 
