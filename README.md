@@ -35,3 +35,17 @@ automatically routes for human review or auto-approval.
 3. Connect Gmail OAuth on the trigger and send nodes
 4. Set the binary field on Extract PDF text node to `attachment_0`
 5. Publish and send yourself a test invoice email
+
+## How to test
+
+1. Import `invoice-workflow.json` into your n8n instance
+2. Add your OpenAI API key on the Chat Model node
+3. Connect your Gmail account on the trigger and send nodes
+4. On the **Extract PDF text** node, set Input Binary Field to `attachment_0`
+5. Publish the workflow
+6. Send yourself an email with subject containing "Invoice" and attach any PDF invoice
+7. Wait up to 1 minute — the Gmail trigger polls every minute
+8. Check your inbox for either a REVIEW REQUIRED or AUTO APPROVED email
+
+**To trigger REVIEW REQUIRED:** send an invoice with total over INR 50,000
+**To trigger AUTO APPROVED:** send an invoice with total under INR 50,000
