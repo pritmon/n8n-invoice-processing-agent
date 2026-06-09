@@ -23,21 +23,13 @@ Gmail Inbox  →  PDF Extract  →  AI Parse  →  Business Rules  →  Email Re
 
 ---
 
-## Flow
+## Workflow — n8n Canvas
 
-<img width="2516" height="1232" alt="image" src="https://github.com/user-attachments/assets/6d3752e0-7f1a-4b5d-862d-5f5f8c0e898a" />
-
-
-```mermaid
-graph LR
-    A([📧 Gmail Trigger]) --> B([📄 Extract PDF Text])
-    B --> C([🤖 GPT-4o-mini\nAI Agent])
-    C --> D{Business Rules}
-    D -- Issues found --> E([🔴 REVIEW REQUIRED\nEmail])
-    D -- All clear --> F([🟢 AUTO APPROVED\nEmail])
-    E --> G([📋 Log Entry])
-    F --> G
-```
+<div align="center">
+<img width="100%" alt="n8n Invoice Processing Workflow" src="https://github.com/user-attachments/assets/6d3752e0-7f1a-4b5d-862d-5f5f8c0e898a" />
+<br/>
+<sub>Live n8n workflow: Gmail trigger → PDF extract → AI agent → business rules → routed email response</sub>
+</div>
 
 ---
 
@@ -127,5 +119,5 @@ The sample invoice in this repo (`test-invoice.pdf`) triggers **REVIEW REQUIRED*
 ---
 
 <div align="center">
-<sub>Built with n8n · OpenAI · Gmail API</sub>
+<sub>Built by <a href="https://github.com/pritmon">pritmon</a> · n8n · OpenAI · Gmail API</sub>
 </div>
