@@ -1,0 +1,380 @@
+{
+  "name": "Invoice Processing Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "filters": {
+          "q": "has:attachment subject:Invoice"
+        },
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "options": {
+          "downloadAttachments": true,
+          "dataPropertyAttachmentsPrefixName": "attachment_"
+        }
+      },
+      "id": "cb774380-feac-45bd-9087-6d7d3e70506a",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "ada13709-8779-40a7-af38-7b87ddda4f17",
+              "leftValue": "={{ Object.keys($binary).length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "967c243d-53a9-4e78-bd1c-cda052f5a00c",
+      "name": "Has attachment?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "id": "17e28124-656c-4afd-b60c-1fdc12fd62fa",
+      "name": "Extract PDF text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "You are an invoice data extraction agent. You receive raw text extracted from a PDF invoice.\n\nExtract ALL of the following fields and return ONLY a valid JSON object, no prose, no markdown fences:\n{\n  \"invoice_number\": \"...\",\n  \"invoice_date\": \"...\",\n  \"due_date\": \"...\",\n  \"vendor_name\": \"...\",\n  \"vendor_gstin\": \"...\",\n  \"bill_to\": \"...\",\n  \"bill_to_gstin\": \"...\",\n  \"line_items\": [\n    {\"description\": \"...\", \"qty\": 0, \"unit_price\": 0, \"amount\": 0}\n  ],\n  \"subtotal\": 0,\n  \"tax_amount\": 0,\n  \"tax_rate_percent\": 0,\n  \"total_due\": 0,\n  \"currency\": \"INR\",\n  \"payment_terms\": \"...\"\n}\n\nUse 0 for any numeric field you cannot find. Use empty string for any text field you cannot find.\nAll monetary values must be numbers (no currency symbols or commas)."
+        }
+      },
+      "id": "00cef506-ac5e-4656-b80b-4a4ecc6dce45",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "882719a4-b2d8-47dc-b481-70b179d6e501",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        840,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nlet raw = $json.output ?? $json.text ?? \"\";\nraw = String(raw).replace(/```json|```/g, \"\").trim();\nlet data;\ntry {\n  data = JSON.parse(raw);\n} catch (e) {\n  throw new Error(\"Agent did not return valid JSON: \" + raw.slice(0, 300));\n}\nreturn [{ json: data }];\n"
+      },
+      "id": "19ab7834-0194-45a2-9643-b1ba82b0e72c",
+      "name": "Parse Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst inv = $json;\nconst anomalies = [];\n\n// Rule 1: Total over approval threshold (INR 50,000)\nif (inv.total_due > 50000) {\n  anomalies.push(`Total INR ${inv.total_due} exceeds auto-approval limit of INR 50,000`);\n}\n\n// Rule 2: Missing tax\nif (!inv.tax_amount || inv.tax_amount === 0) {\n  anomalies.push(\"No tax amount found on invoice\");\n}\n\n// Rule 3: Missing invoice number\nif (!inv.invoice_number || inv.invoice_number === '') {\n  anomalies.push(\"Invoice number is missing\");\n}\n\n// Rule 4: Missing vendor GSTIN\nif (!inv.vendor_gstin || inv.vendor_gstin === '') {\n  anomalies.push(\"Vendor GSTIN is missing \u2014 required for compliance\");\n}\n\n// Rule 5: Due date check (overdue?)\nif (inv.due_date && inv.due_date !== '') {\n  const due = new Date(inv.due_date);\n  const today = new Date();\n  if (!isNaN(due) && due < today) {\n    anomalies.push(`Invoice is overdue \u2014 due date was ${inv.due_date}`);\n  }\n}\n\nconst result = {\n  ...inv,\n  anomalies,\n  has_anomaly: anomalies.length > 0,\n  status: anomalies.length > 0 ? \"REVIEW_REQUIRED\" : \"AUTO_APPROVED\"\n};\n\nreturn [{ json: result }];\n"
+      },
+      "id": "e1a2996f-c5c6-4ef9-98b1-aed2ca352e29",
+      "name": "Validate Rules",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "b98fd841-f556-46b4-ab0b-ce8532f21969",
+              "leftValue": "={{ $json.has_anomaly }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4b4c7e64-fcee-492a-a1cd-b289533b983f",
+      "name": "Any anomaly?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "pritambtech@gmail.com",
+        "subject": "=REVIEW REQUIRED: Invoice {{ $json.invoice_number }} from {{ $json.vendor_name }}",
+        "message": "=<div style='font-family:Arial,sans-serif;max-width:600px'><h2 style='color:#dc2626'>Invoice Review Required</h2><p><b>Invoice:</b> {{ $json.invoice_number }}<br><b>Vendor:</b> {{ $json.vendor_name }}<br><b>Total:</b> INR {{ $json.total_due }}<br><b>Due:</b> {{ $json.due_date }}</p><h3>Issues found:</h3><ul>{{ $json.anomalies.map(a => '<li>' + a + '</li>').join('') }}</ul><p>Please review and approve manually.</p></div>",
+        "options": {}
+      },
+      "id": "af85c7b0-7806-4bcd-9948-e19c1975cc69",
+      "name": "Flag for review",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "pritambtech@gmail.com",
+        "subject": "=AUTO-APPROVED: Invoice {{ $json.invoice_number }} from {{ $json.vendor_name }}",
+        "message": "=<div style='font-family:Arial,sans-serif;max-width:600px'><h2 style='color:#16a34a'>Invoice Auto-Approved</h2><p><b>Invoice:</b> {{ $json.invoice_number }}<br><b>Vendor:</b> {{ $json.vendor_name }}<br><b>Total:</b> INR {{ $json.total_due }}<br><b>Due:</b> {{ $json.due_date }}<br><b>Tax:</b> INR {{ $json.tax_amount }} ({{ $json.tax_rate_percent }}%)</p><p style='color:#16a34a'>All validation checks passed. Invoice logged for payment.</p></div>",
+        "options": {}
+      },
+      "id": "8a2983e9-dce9-4da7-99c0-23cbae1aca7f",
+      "name": "Auto approve",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1780,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b1dabc54-727a-4ec0-9fd2-fe5f3c68793d",
+              "name": "logged_at",
+              "value": "={{ $now }}",
+              "type": "string"
+            },
+            {
+              "id": "e21044d6-bd8d-4630-a201-a3a26c9ea5a7",
+              "name": "invoice_number",
+              "value": "={{ $json.invoice_number }}",
+              "type": "string"
+            },
+            {
+              "id": "8b480f0a-f96b-475b-a92f-93e3c79f2f9b",
+              "name": "vendor",
+              "value": "={{ $json.vendor_name }}",
+              "type": "string"
+            },
+            {
+              "id": "2ea5fbfd-9515-4f10-8dec-48833e0c4e08",
+              "name": "total_due",
+              "value": "={{ $json.total_due }}",
+              "type": "number"
+            },
+            {
+              "id": "76bcddf7-b813-4e7c-8ecd-22430103132a",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ba581d81-d409-4a08-8fa9-3911307820fa",
+      "name": "Log invoice",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Has attachment?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has attachment?": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF text",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Extract PDF text": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Output": {
+      "main": [
+        [
+          {
+            "node": "Validate Rules",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Rules": {
+      "main": [
+        [
+          {
+            "node": "Any anomaly?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any anomaly?": {
+      "main": [
+        [
+          {
+            "node": "Flag for review",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Auto approve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag for review": {
+      "main": [
+        [
+          {
+            "node": "Log invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto approve": {
+      "main": [
+        [
+          {
+            "node": "Log invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templateId": "invoice-processing-agent"
+  }
+}
