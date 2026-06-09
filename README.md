@@ -25,6 +25,9 @@ Gmail Inbox  →  PDF Extract  →  AI Parse  →  Business Rules  →  Email Re
 
 ## Flow
 
+<img width="2516" height="1232" alt="image" src="https://github.com/user-attachments/assets/6d3752e0-7f1a-4b5d-862d-5f5f8c0e898a" />
+
+
 ```mermaid
 graph LR
     A([📧 Gmail Trigger]) --> B([📄 Extract PDF Text])
