@@ -1,51 +1,128 @@
-# n8n Invoice Processing Agent
+<div align="center">
 
-A live n8n workflow that monitors Gmail for invoice emails, extracts all fields
-from PDF attachments using GPT-4o-mini, validates against business rules, and
-automatically routes for human review or auto-approval.
+# 🧾 n8n Invoice Processing Agent
 
-## What it does
+**AI-powered invoice automation — from Gmail inbox to approval decision in seconds.**
 
-1. Gmail Trigger watches inbox for emails with PDF attachments
-2. Extracts text from the PDF invoice
-3. AI Agent (gpt-4o-mini) extracts all invoice fields — vendor, total, GST, due date, line items
-4. Validates 5 business rules:
-   - Amount over INR 50,000 → requires human review
-   - Missing tax amount → flagged
-   - Missing invoice number → flagged
-   - Missing vendor GSTIN → flagged
-   - Overdue invoice → flagged
-5. Routes to REVIEW REQUIRED or AUTO APPROVED email accordingly
-6. Logs every invoice (number, vendor, total, status, timestamp)
+[![n8n](https://img.shields.io/badge/built%20with-n8n-orange?logo=n8n&logoColor=white)](https://n8n.io)
+[![OpenAI](https://img.shields.io/badge/GPT--4o--mini-OpenAI-412991?logo=openai&logoColor=white)](https://openai.com)
+[![Gmail](https://img.shields.io/badge/Gmail-API-EA4335?logo=gmail&logoColor=white)](https://developers.google.com/gmail)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-## Output
+</div>
 
-**REVIEW REQUIRED** — red email listing all issues found
-**AUTO APPROVED** — green email confirming the invoice passed all checks
+---
+
+## What It Does
+
+This live n8n workflow monitors your Gmail inbox for invoice emails, reads the attached PDF, uses GPT-4o-mini to extract every field, runs 5 business-rule checks, then fires either a **REVIEW REQUIRED** or **AUTO APPROVED** response email — all without touching a spreadsheet.
+
+```
+Gmail Inbox  →  PDF Extract  →  AI Parse  →  Business Rules  →  Email Response + Log
+```
+
+---
+
+## Flow
+
+```mermaid
+graph LR
+    A([📧 Gmail Trigger]) --> B([📄 Extract PDF Text])
+    B --> C([🤖 GPT-4o-mini\nAI Agent])
+    C --> D{Business Rules}
+    D -- Issues found --> E([🔴 REVIEW REQUIRED\nEmail])
+    D -- All clear --> F([🟢 AUTO APPROVED\nEmail])
+    E --> G([📋 Log Entry])
+    F --> G
+```
+
+---
+
+## Input — Sample Invoice PDF
+
+<div align="center">
+<img src="assets/invoice-sample.png" width="480" alt="Sample Invoice PDF" />
+<br/>
+<sub>A real test invoice sent as a Gmail attachment — INV-2026-00842 · Acme Supplies Pvt Ltd · INR 75,520</sub>
+</div>
+
+---
+
+## Output — Gmail Response Emails
+
+<table>
+<tr>
+<td align="center" width="50%">
+
+### 🔴 Review Required
+
+<img src="assets/gmail-review-required.png" width="380" alt="REVIEW REQUIRED email" />
+
+Triggered when total **> INR 50,000** or any field is missing/flagged
+
+</td>
+<td align="center" width="50%">
+
+### 🟢 Auto Approved
+
+<img src="assets/gmail-auto-approved.png" width="380" alt="AUTO APPROVED email" />
+
+Triggered when all 5 business rules pass cleanly
+
+</td>
+</tr>
+</table>
+
+---
+
+## Business Rules
+
+| # | Rule | Result |
+|---|------|--------|
+| 1 | Amount > INR 50,000 | 🔴 Review Required |
+| 2 | Missing tax amount | 🔴 Review Required |
+| 3 | Missing invoice number | 🔴 Review Required |
+| 4 | Missing vendor GSTIN | 🔴 Review Required |
+| 5 | Invoice is overdue | 🔴 Review Required |
+| ✓ | All rules pass | 🟢 Auto Approved |
+
+---
 
 ## Stack
-- n8n Cloud
-- GPT-4o-mini (OpenAI)
-- LangChain (via n8n AI Agent node)
-- Gmail API (trigger + send)
 
-## How to import
-1. Import `invoice-workflow.json` into n8n
-2. Add OpenAI credential on the Chat Model node
-3. Connect Gmail OAuth on the trigger and send nodes
-4. Set the binary field on Extract PDF text node to `attachment_0`
-5. Publish and send yourself a test invoice email
+| Layer | Tool |
+|-------|------|
+| Workflow automation | [n8n Cloud](https://n8n.io) |
+| AI extraction | GPT-4o-mini via OpenAI API |
+| LLM orchestration | LangChain (n8n AI Agent node) |
+| Email trigger + send | Gmail OAuth API |
 
-## How to test
+---
 
-1. Import `invoice-workflow.json` into your n8n instance
-2. Add your OpenAI API key on the Chat Model node
-3. Connect your Gmail account on the trigger and send nodes
-4. On the **Extract PDF text** node, set Input Binary Field to `attachment_0`
-5. Publish the workflow
-6. Send yourself an email with subject containing "Invoice" and attach any PDF invoice
-7. Wait up to 1 minute — the Gmail trigger polls every minute
-8. Check your inbox for either a REVIEW REQUIRED or AUTO APPROVED email
+## Quick Setup
 
-**To trigger REVIEW REQUIRED:** send an invoice with total over INR 50,000
-**To trigger AUTO APPROVED:** send an invoice with total under INR 50,000
+1. **Import** `invoice-workflow.json` into your n8n instance
+2. **OpenAI** — add your API key on the Chat Model node
+3. **Gmail** — connect OAuth on both the trigger and send nodes
+4. **PDF node** — set *Input Binary Field* to `attachment_0`
+5. **Publish** the workflow
+
+---
+
+## Testing
+
+Send yourself an email with **"Invoice"** in the subject and a PDF attached.  
+The Gmail trigger polls every 60 seconds.
+
+| Test case | How to trigger |
+|-----------|---------------|
+| 🔴 REVIEW REQUIRED | Attach an invoice with total > INR 50,000 |
+| 🟢 AUTO APPROVED | Attach an invoice with total < INR 50,000 and all fields present |
+
+The sample invoice in this repo (`test-invoice.pdf`) triggers **REVIEW REQUIRED** — total is INR 75,520.
+
+---
+
+<div align="center">
+<sub>Built with n8n · OpenAI · Gmail API</sub>
+</div>
